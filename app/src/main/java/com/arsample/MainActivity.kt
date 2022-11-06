@@ -1,60 +1,70 @@
 package com.arsample
 
+import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import com.google.ar.core.*
 import com.google.ar.sceneform.AnchorNode
-import com.google.ar.sceneform.assets.RenderableSource
+import com.google.ar.sceneform.FrameTime
+import com.google.ar.sceneform.Scene
 import com.google.ar.sceneform.rendering.ModelRenderable
-import com.google.ar.sceneform.ux.ArFragment
-import com.google.ar.sceneform.ux.TransformableNode
 
 private const val TAG = "MainActivity"
 
-class MainActivity : AppCompatActivity() {
-    private lateinit var arFragment: ArFragment
-    private  lateinit var modelRenderable: ModelRenderable
-    private var modelUrl = "https://github.com/josephmusila/AR-Sample/blob/main/ar_asset.glb"
+class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
+    private lateinit var arSceneFragment: ARSceneFragment
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        arFragment = supportFragmentManager.findFragmentById(R.id.fragment) as ArFragment
-        setupModel()
-        setupPlane()
+        arSceneFragment =
+            supportFragmentManager.findFragmentById(R.id.ar_fragment) as ARSceneFragment
+        arSceneFragment.arSceneView.scene.addOnUpdateListener(this)
     }
 
-    private fun setupPlane(){
-        arFragment.setOnTapArPlaneListener { hitResult, plane, motionEvent ->
-            var anchor = hitResult.createAnchor()
-            var anchorNode = AnchorNode(anchor)
-            anchorNode.setParent(arFragment.arSceneView.scene)
-            createModel(anchorNode)
+    fun setupDatabase(session: Session, config: Config) {
+        val imageDatabase = AugmentedImageDatabase(session)
+        val cubeBitmap = assets.open("cube.jpg").use { BitmapFactory.decodeStream(it) }
+        imageDatabase.addImage("cube", cubeBitmap)
+        config.augmentedImageDatabase = imageDatabase
+    }
+
+    override fun onUpdate(p0: FrameTime?) {
+        val frame = arSceneFragment.arSceneView.arFrame
+        var images = frame?.getUpdatedTrackables(AugmentedImage::class.java)
+
+        if (images != null) {
+            for (image in images){
+                when(image.trackingState){
+                    TrackingState.TRACKING -> {
+                        val anchor = image.createAnchor(image.centerPose)
+                        if(image.name.equals("cube")){
+                            Log.d(TAG, "onUpdate: Frame tracking - cube identified")
+                            createAnchor(anchor)
+                        }
+                    }
+                    TrackingState.PAUSED -> {}
+                    TrackingState.STOPPED -> {}
+                }
+            }
         }
     }
 
-    private fun createModel(anchorNode: AnchorNode) {
-        var node = TransformableNode(arFragment.transformationSystem)
-        node.setParent(anchorNode)
-        node.renderable = modelRenderable
-        node.select()
+    private fun createAnchor(anchor: Anchor) {
+        ModelRenderable.builder()
+            .setSource(this, Uri.parse("models/rubiks_cube.glb"))
+            .build()
+            .thenAccept {
+                placeModel(it, anchor)
+            }
     }
 
-    private fun setupModel(){
-        ModelRenderable.builder()
-            .setSource(this,
-                RenderableSource.builder().setSource(this, Uri.parse(modelUrl), RenderableSource.SourceType.GLB)
-                    .setScale(0.75f)
-                    .setRecenterMode(RenderableSource.RecenterMode.ROOT)
-                    .build()
-            ).build()
-            .thenAccept {
-                modelRenderable = it
-                Log.d(TAG, "setupModel: Then Accept")
-            }
-
+    private fun placeModel(modelRenderable: ModelRenderable, anchor: Anchor) {
+        val anchorNode = AnchorNode(anchor)
+        anchorNode.renderable = modelRenderable
+        arSceneFragment.arSceneView.scene.addChild(anchorNode)
     }
 }
