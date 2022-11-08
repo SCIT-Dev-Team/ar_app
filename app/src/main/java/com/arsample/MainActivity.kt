@@ -54,12 +54,12 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
     }
 
     private fun createAnchor(anchor: Anchor) {
-        ModelRenderable.builder()
-            .setSource(this, Uri.parse("models/rubiks_cube.glb"))
-            .build()
-            .thenAccept {
-                placeModel(it, anchor)
-            }
+//        ModelRenderable.builder()
+//            .setSource(this, Uri.parse("models/rubiks_cube.glb"))
+//            .build()
+//            .thenAccept {
+//                placeModel(it, anchor)
+//            }
     }
 
     private fun placeModel(modelRenderable: ModelRenderable, anchor: Anchor) {
