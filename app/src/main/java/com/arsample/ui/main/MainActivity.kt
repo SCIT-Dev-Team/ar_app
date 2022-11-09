@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -15,7 +16,9 @@ import com.google.ar.sceneform.FrameTime
 import com.google.ar.sceneform.Node
 import com.google.ar.sceneform.Scene
 import com.google.ar.sceneform.assets.RenderableSource
+import com.google.ar.sceneform.rendering.FixedWidthViewSizer
 import com.google.ar.sceneform.rendering.ModelRenderable
+import com.google.ar.sceneform.rendering.ViewRenderable
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -32,7 +35,12 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
      * Track loading models so as to load models only once
      */
     private val loadingModels: ArrayList<String> = ArrayList()
-    private val renderables: HashMap<String, ModelRenderable> = HashMap()
+    private val modelRenderables: HashMap<String, ModelRenderable> = HashMap()
+    /**
+     * Track loading detail views
+     */
+    private val loadingViews: ArrayList<String> = ArrayList()
+    private val viewRenderables: HashMap<String, ViewRenderable> = HashMap()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,12 +78,34 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
                 if (artifact != null) {
                     when (image.trackingState) {
                         TrackingState.TRACKING -> {
-                            val renderable = renderables[artifact.model]
-                            if (renderable == null && !loadingModels.contains(artifact.model)) {
+                            //render model
+                            val modelRenderable = modelRenderables[artifact.model]
+                            if (modelRenderable == null && !loadingModels.contains(artifact.model)) {
                                 // ensures that the model is not loading and has not been rendered
-                                Log.d(TAG, "onUpdate: found ${artifact.name}")
                                 val anchor = image.createAnchor(image.centerPose)
-                                createAnchor(anchor, artifact)
+                                renderArtifactModel(anchor, artifact)
+                            }
+
+                            //render details card
+                            val viewRenderable = viewRenderables[artifact.id.toString()]
+                            if(viewRenderable == null && !loadingViews.contains(artifact.id.toString())){
+                                val imageCenterPose = image.centerPose
+                                val anchor = image.createAnchor(
+                                    Pose(
+                                        floatArrayOf(
+                                            imageCenterPose.translation[0],
+                                            imageCenterPose.translation[1]+ (image.extentX/2),
+                                            imageCenterPose.translation[2]
+                                        ),
+                                        floatArrayOf(
+                                            imageCenterPose.rotationQuaternion[0],
+                                            90f,
+                                            imageCenterPose.rotationQuaternion[2],
+                                            imageCenterPose.rotationQuaternion[3],
+                                        )
+                                    )
+                                )
+                                renderArtifactDetailView(artifact, anchor)
                             }
                         }
                         TrackingState.PAUSED -> {}
@@ -86,8 +116,55 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
         }
     }
 
-    private fun createAnchor(anchor: Anchor, artifact: Artifact) {
-        Log.d(TAG, "createAnchor: creating anchor")
+    /**
+     * displays the artifacts detail card
+     */
+    private fun renderArtifactDetailView(artifact: Artifact, anchor: Anchor){
+        Log.d(TAG, "renderArtifactDetailView: rendering ${artifact.name}")
+        loadingViews.add(artifact.id.toString())
+        ViewRenderable.builder()
+            .setView(this, R.layout.artifact_detail_layout)
+            .build()
+            .thenAccept {
+                it.isShadowCaster = false
+                it.isShadowReceiver = false
+                it.sizer = FixedWidthViewSizer(0.3f)
+
+                val view = it.view
+                view.findViewById<TextView>(R.id.tv_artifact_title).text = artifact.name
+                view.findViewById<TextView>(R.id.tv_artifact_description).text = artifact.description
+
+                placeArtifactDetailView(it, anchor, artifact)
+                loadingViews.removeIf { lv ->
+                    lv == artifact.id.toString()
+                }
+            }
+            .exceptionally {
+                loadingViews.removeIf { lv ->
+                    lv == artifact.id.toString()
+                }
+                null
+            }
+    }
+
+    /**
+     * places the artifact detail view to its anchor position
+     */
+    private fun placeArtifactDetailView(
+        viewRenderable: ViewRenderable,
+        anchor: Anchor,
+        artifact: Artifact
+    ){
+        val anchorNode = AnchorNode(anchor)
+        anchorNode.renderable = viewRenderable
+        arSceneFragment.arSceneView.scene.addChild(anchorNode)
+        viewRenderables[artifact.id.toString()] = viewRenderable
+    }
+
+    /**
+     * Loads the artifact's 3d model
+     */
+    private fun renderArtifactModel(anchor: Anchor, artifact: Artifact) {
         loadingModels.add(artifact.model)
         ModelRenderable.builder()
             .setSource(
@@ -106,11 +183,10 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
                 it.isShadowCaster = false
                 placeModel(it, anchor)
 
-                renderables[artifact.model] = it
+                modelRenderables[artifact.model] = it
                 loadingModels.removeIf { model ->
                     model == artifact.model
                 }
-                print("loaded model")
             }
             .exceptionally {
                 Log.d(TAG, "createAnchor: Unable to load renderable $it")
@@ -121,6 +197,9 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
             }
     }
 
+    /**
+     * places the model renderable into the desires anchor position
+     */
     private fun placeModel(modelRenderable: ModelRenderable, anchor: Anchor) {
         var anchorNode: Node? = arSceneFragment.arSceneView.scene.children.firstOrNull {
             it.renderable == modelRenderable
@@ -128,8 +207,6 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
         if (anchorNode == null) {
             anchorNode = AnchorNode(anchor)
             anchorNode.renderable = modelRenderable
-        } else {
-            Log.d(TAG, "placeModel: model already placed")
         }
         arSceneFragment.arSceneView.scene.addChild(anchorNode)
     }
