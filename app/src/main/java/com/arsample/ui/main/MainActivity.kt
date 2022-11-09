@@ -1,21 +1,24 @@
-package com.arsample
+package com.arsample.ui.main
 
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import com.arsample.R
 import com.google.ar.core.*
 import com.google.ar.sceneform.AnchorNode
 import com.google.ar.sceneform.FrameTime
 import com.google.ar.sceneform.Scene
 import com.google.ar.sceneform.rendering.ModelRenderable
+import dagger.hilt.android.AndroidEntryPoint
 
 private const val TAG = "MainActivity"
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
     private lateinit var arSceneFragment: ARSceneFragment
+    private val mainViewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,6 +26,8 @@ class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
         arSceneFragment =
             supportFragmentManager.findFragmentById(R.id.ar_fragment) as ARSceneFragment
         arSceneFragment.arSceneView.scene.addOnUpdateListener(this)
+
+        mainViewModel.getArtifacts()
     }
 
     fun setupDatabase(session: Session, config: Config) {

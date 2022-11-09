@@ -3,11 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    tools:context=".ui.main.MainActivity">
 
     <fragment
         android:id="@+id/ar_fragment"
-        android:name="com.arsample.ARSceneFragment"
+        android:name="com.arsample.ui.main.ARSceneFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

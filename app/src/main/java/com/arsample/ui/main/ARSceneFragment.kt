@@ -1,4 +1,4 @@
-package com.arsample
+package com.arsample.ui.main
 
 import com.google.ar.core.Config
 import com.google.ar.core.Session
